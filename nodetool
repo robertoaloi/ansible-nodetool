@@ -1,17 +1,40 @@
 #!/usr/bin/env escript
+
 %% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %% ex: ft=erlang ts=4 sw=4 et
 %% -------------------------------------------------------------------
 %%
-%% nodetool: Helper Script for interacting with live nodes
+%% DOCUMENTATION
+%%
+%% module:            nodetool
+%% short_description: A little helper to interact with Erlang nodes
+%% description:       A little helper to interact with Erlang nodes
+%% options:
+%%   node:
+%%     description: The remote Erlang node
+%%     required:    true
+%%   action:
+%%     description: getpid | ping | stop | restart | reboot | eval
+%%     required:    true
+%%   nametype:
+%%     description: longnames | shortnames
+%%     required:    false
+%%     default:     shortnames
+%%   cookie:
+%%     description: Erlang Cookie to be used for the connection
+%%     required:    false
+%%   timeout:
+%%     description: Timeout (in ms) for the actions
+%%     required:    false
+%%     default:     60000
 %%
 %% -------------------------------------------------------------------
 -define(RPC_TIMEOUT, 60 * 1000). %% 1 minute
 
-main(Args0) ->
+main([ConfigFile]) ->
 
     %% Extract the args
-    Args = process_args(Args0),
+    Args = parse_args(ConfigFile),
 
     Action   = get_arg("action",   Args),
     Node     = get_arg("node",     Args),
@@ -65,20 +88,25 @@ main(Args0) ->
     end,
     net_kernel:stop().
 
-process_args(Args) ->
-    process_args(Args, []).
+parse_args(ConfigFile) ->
+    case file:read_file(ConfigFile) of
+        {error, Reason} ->
+            fail("~p", [Reason]);
+        {ok, Config} ->
+            parse_args(re:split(Config, " "), [])
+    end.
 
-process_args([], Acc) ->
+parse_args([], Acc) ->
     Acc; %% No need to reverse
-process_args([H|T], Acc) ->
-    case string:tokens(H, [$=]) of
-        ["cookie", Cookie] ->
+parse_args([H|T], Acc) ->
+    case re:split(H, "=") of
+        [<<"cookie">>, Cookie] ->
             erlang:set_cookie(node(), list_to_atom(Cookie)),
-            process_args(T, [{"cookie", Cookie}|Acc]);
+            parse_args(T, [{"cookie", Cookie}|Acc]);
         [Key, Value] ->
-            process_args(T, [{Key, Value}|Acc]);
+            parse_args(T, [{binary_to_list(Key), binary_to_list(Value)}|Acc]);
         _ ->
-            process_args(T, Acc)
+            parse_args(T, Acc)
     end.
 
 start_distribution(Name, NameType) ->
@@ -153,7 +181,7 @@ rpc(Mod, Fun, Args, Opts) ->
 
 rpc(Mod, Fun, Args, Opts, Callback) ->
     Node    = nodename(get_arg("node", Opts)),
-    Timeout = get_arg("rpc_timeout", Opts, ?RPC_TIMEOUT),
+    Timeout = get_arg("timeout", Opts, ?RPC_TIMEOUT),
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
         {badrpc, Reason} ->
             fail("RPC to ~p failed: ~p", [Node, Reason]);
