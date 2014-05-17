@@ -52,27 +52,18 @@ main(Args0) ->
             %% ping, so just dump a "pong"
             success("pong");
         "stop" ->
-            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
-            success("~p", [rpc:call(TargetNode, init, stop, [], Timeout)]);
+            rpc(TargetNode, init, stop, [], Args);
         "restart" ->
-            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
-            success("~p", [rpc:call(TargetNode, init, restart, [], Timeout)]);
+            rpc(TargetNode, init, restart, [], Args);
         "reboot" ->
-            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
-            success("~p", [rpc:call(TargetNode, init, reboot, [], Timeout)]);
+            rpc(TargetNode, init, reboot, [], Args);
         "eval" ->
             Command = get_arg("command", Args, "") ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
-                        {ok, Parsed} ->
-                            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
-                            case rpc:call(TargetNode, erl_eval, exprs, [Parsed, []], Timeout) of
-                                {badrpc, Reason} ->
-                                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
-                                {value, Value, _} ->
-                                    success("~p", [Value])
-                            end;
+                        {ok, Exprs} ->
+                            rpc(TargetNode, erl_eval, exprs, [Exprs, []], Args);
                         {error, Reason} ->
                             Msg = format_parse_error(Reason),
                             fail(Msg)
@@ -172,3 +163,14 @@ get_arg(Key, Args) ->
 
 get_arg(Key, Args, Default) ->
     proplists:get_value(Key, Args, Default).
+
+rpc(Node, Mod, Fun, Args, Opts) ->
+    Timeout = get_arg("rpc_timeout", Opts, ?RPC_TIMEOUT),
+    case rpc:call(Node, Mod, Fun, Args, Timeout) of
+        {badrpc, Reason} ->
+            fail("RPC to ~p failed: ~p", [Node, Reason]);
+        {value, Result, _} -> %% From erl_eval
+            success("~p", [Result]);
+        Result ->
+            success("~p", [Result])
+    end.
