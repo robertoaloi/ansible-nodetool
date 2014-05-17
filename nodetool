@@ -10,40 +10,18 @@
 
 main(Args0) ->
 
-    ok = start_epmd(),
     %% Extract the args
     Args = process_args(Args0),
-    Action = get_arg("action", Args),
-    Node = get_arg("node", Args),
 
-    %% any commands that don't need a running node
-    case Action of
-        "chkconfig" ->
-            File = get_arg("file", Args),
-            case file:consult(File) of
-                {ok, _} ->
-                    success("ok");
-                {error, {Line, Mod, Term}} ->
-                    Error = file:format_error({Line, Mod, Term}),
-                    fail("Error on line ~s", [Error]);
-                {error, R} ->
-                    Error = file:format_error(R),
-                    fail("Error reading config file: ~s", [Error])
-            end;
-        _ ->
-            ok
-    end,
+    Action   = get_arg("action",   Args),
+    Node     = get_arg("node",     Args),
+    NameType = get_arg("nametype", Args, shortnames),
 
-    %% See if the node is currently running  -- if it's not, we'll bail
-    case {net_kernel:hidden_connect_node(Node),
-          net_adm:ping(Node)} of
-        {true, pong} ->
-            ok;
-        {false,pong} ->
-            fail(io_lib:format("Failed to connect to node ~p", [Node]));
-        {_, pang} ->
-            fail(io_lib:format("Node ~p not responding to pings.", [Node]))
-    end,
+    ThisNode   = append_node_suffix(Node, "_maint_"),
+
+    ok = start_distribution(ThisNode, NameType),
+
+    TargetNode = nodename(Node),
 
     case Action of
         "getpid" ->
@@ -52,9 +30,12 @@ main(Args0) ->
                  end,
             rpc(os, getpid, [], Args, Cb);
         "ping" ->
-            %% If we got this far, the node already responsed to a
-            %% ping, so just dump a "pong"
-            success("pong");
+            case net_adm:ping(TargetNode) of
+                pong ->
+                    success("pong");
+                pang ->
+                    fail("Node ~p not responding to pings.", [TargetNode])
+            end;
         "stop" ->
             rpc(init, stop, [], Args);
         "restart" ->
@@ -94,21 +75,17 @@ process_args([H|T], Acc) ->
         ["cookie", Cookie] ->
             erlang:set_cookie(node(), list_to_atom(Cookie)),
             process_args(T, [{"cookie", Cookie}|Acc]);
-        ["name", TargetName] ->
-            ThisNode = append_node_suffix(TargetName, "_maint_"),
-            {ok, _} = net_kernel:start([ThisNode, longnames]),
-            TargetNode = nodename(TargetName),
-            process_args(T, [{"name", TargetName},{"node", TargetNode}|Acc]);
-        ["sname", TargetName] ->
-            ThisNode = append_node_suffix(TargetName, "_maint_"),
-            {ok, _} = net_kernel:start([ThisNode, shortnames]),
-            TargetNode = nodename(TargetName),
-            process_args(T, [{"name", TargetName},{"node", TargetNode}|Acc]);
         [Key, Value] ->
             process_args(T, [{Key, Value}|Acc]);
         _ ->
             process_args(T, Acc)
     end.
+
+start_distribution(Name, NameType) ->
+    ok = start_epmd(),
+    application:set_env(net_kernel, dist_auto_connect, false), %% Hidden node
+    {ok, _} = net_kernel:start([Name, NameType]),
+    ok.
 
 start_epmd() ->
     [] = os:cmd(epmd_path() ++ " -daemon"),
@@ -172,10 +149,10 @@ get_arg(Key, Args, Default) ->
     proplists:get_value(Key, Args, Default).
 
 rpc(Mod, Fun, Args, Opts) ->
-    rpc(Mod, Fun, Args, Opts, success/1).
+    rpc(Mod, Fun, Args, Opts, fun(X) -> success("~p", [X]) end).
 
 rpc(Mod, Fun, Args, Opts, Callback) ->
-    Node    = get_arg("node", Opts),
+    Node    = nodename(get_arg("node", Opts)),
     Timeout = get_arg("rpc_timeout", Opts, ?RPC_TIMEOUT),
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
         {badrpc, Reason} ->
