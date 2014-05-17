@@ -9,7 +9,7 @@
 main(Args) ->
     ok = start_epmd(),
     %% Extract the args
-    {RestArgs, TargetNode} = process_args(Args, [], undefined),
+    {RestArgs, TargetNode} = process_args(Args),
 
     %% any commands that don't need a running node
     case RestArgs of
@@ -87,6 +87,9 @@ main(Args) ->
             fail("Usage: nodetool {chkconfig|getpid|ping|stop|restart|reboot|rpc|rpc_infinity|rpcterms}")
     end,
     net_kernel:stop().
+
+process_args(Args) ->
+    process_args(Args, [], undefined).
 
 process_args([], Acc, TargetNode) ->
     {lists:reverse(Acc), TargetNode};
