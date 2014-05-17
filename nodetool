@@ -121,8 +121,7 @@ epmd_path() ->
         false ->
             case os:find_executable(Name) of
                 false ->
-                    io:format("Could not find epmd.~n"),
-                    halt(1);
+                    fail("Could not find epmd.");
                 GlobalEpmd ->
                     GlobalEpmd
             end;
