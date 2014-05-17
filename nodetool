@@ -47,25 +47,30 @@ main(Args0) ->
 
     case Action of
         "getpid" ->
-            success("~p",
-                      [list_to_integer(rpc:call(Node, os, getpid, []))]);
+            Cb = fun(Pid) ->
+                         success("~p", [list_to_integer(Pid)])
+                 end,
+            rpc(os, getpid, [], Args, Cb);
         "ping" ->
             %% If we got this far, the node already responsed to a
             %% ping, so just dump a "pong"
             success("pong");
         "stop" ->
-            rpc(Node, init, stop, [], Args);
+            rpc(init, stop, [], Args);
         "restart" ->
-            rpc(Node, init, restart, [], Args);
+            rpc(init, restart, [], Args);
         "reboot" ->
-            rpc(Node, init, reboot, [], Args);
+            rpc(init, reboot, [], Args);
         "eval" ->
             Command = get_arg("command", Args, "") ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
                         {ok, Exprs} ->
-                            rpc(Node, erl_eval, exprs, [Exprs, []], Args);
+                            Cb = fun({value, Value, _}) ->
+                                         success("~p", [Value])
+                                 end,
+                            rpc(erl_eval, exprs, [Exprs, []], Args, Cb);
                         {error, Reason} ->
                             Msg = format_parse_error(Reason),
                             fail(Msg)
@@ -167,13 +172,15 @@ get_arg(Key, Args) ->
 get_arg(Key, Args, Default) ->
     proplists:get_value(Key, Args, Default).
 
-rpc(Node, Mod, Fun, Args, Opts) ->
+rpc(Mod, Fun, Args, Opts) ->
+    rpc(Mod, Fun, Args, Opts, success/1).
+
+rpc(Mod, Fun, Args, Opts, Callback) ->
+    Node    = get_arg("node", Opts),
     Timeout = get_arg("rpc_timeout", Opts, ?RPC_TIMEOUT),
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
         {badrpc, Reason} ->
             fail("RPC to ~p failed: ~p", [Node, Reason]);
-        {value, Result, _} -> %% From erl_eval
-            success("~p", [Result]);
         Result ->
-            success("~p", [Result])
+            Callback(Result)
     end.
