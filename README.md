@@ -23,3 +23,9 @@ An Ansible module to interact with Erlang nodes.
          description: Timeout (in ms) for the actions
          required:    false
          default:     60000
+
+## Credits
+
+The work is based on the `nodetool` script from the Yaws project:
+
+https://github.com/klacke/yaws
