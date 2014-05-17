@@ -173,7 +173,7 @@ success(String) ->
 
 success(String, Args) ->
     Msg = lists:flatten(io_lib:format(String, Args)),
-    io:format("{\"error\" : false, \"msg\": ~p}", [Msg]),
+    io:format("{\"changed\": true, \"msg\": ~p}", [Msg]),
     halt(0).
 
 fail(String) ->
@@ -181,5 +181,5 @@ fail(String) ->
 
 fail(String, Args) ->
     Msg = lists:flatten(io_lib:format(String, Args)),
-    io:format("{\"error\" : true, \"msg\": ~p}", [Msg]),
+    io:format("{\"failed\" : true, \"msg\": ~p}", [Msg]),
     halt(1).
