@@ -6,14 +6,18 @@
 %% nodetool: Helper Script for interacting with live nodes
 %%
 %% -------------------------------------------------------------------
-main(Args) ->
+-define(RPC_TIMEOUT, 60 * 1000). %% 1 minute
+
+main(Args0) ->
     ok = start_epmd(),
     %% Extract the args
-    {RestArgs, TargetNode} = process_args(Args),
+    {Args, TargetNode} = process_args(Args0),
+    Action = proplists:get_value("action", Args),
 
     %% any commands that don't need a running node
-    case RestArgs of
-        ["chkconfig", File] ->
+    case Action of
+        "chkconfig" ->
+            File = proplists:get_value("file", Args),
             case file:consult(File) of
                 {ok, _} ->
                     success("ok");
@@ -39,52 +43,46 @@ main(Args) ->
             fail(io_lib:format("Node ~p not responding to pings.", [TargetNode]))
     end,
 
-    case RestArgs of
-        ["getpid"] ->
+    case Action of
+        "getpid" ->
             success("~p",
                       [list_to_integer(rpc:call(TargetNode, os, getpid, []))]);
-        ["ping"] ->
+        "ping" ->
             %% If we got this far, the node already responsed to a
             %% ping, so just dump a "pong"
             success("pong");
-        ["stop"] ->
-            success("~p", [rpc:call(TargetNode, init, stop, [], 60000)]);
-        ["restart"] ->
-            success("~p", [rpc:call(TargetNode, init, restart, [], 60000)]);
-        ["reboot"] ->
-            success("~p", [rpc:call(TargetNode, init, reboot, [], 60000)]);
-        ["rpc", Module, Function | RpcArgs] ->
-            case rpc:call(TargetNode,
-                          list_to_atom(Module),
-                          list_to_atom(Function),
-                          [RpcArgs], 60000) of
-                {badrpc, Reason} ->
-                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
-                Res ->
-                    success("~p", [Res])
-            end;
-        ["rpc_infinity", Module, Function | RpcArgs] ->
-            case rpc:call(TargetNode,
-                          list_to_atom(Module),
-                          list_to_atom(Function),
-                          [RpcArgs], infinity) of
-                {badrpc, Reason} ->
-                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
-                Res ->
-                    success("~p", [Res])
-            end;
-        ["rpcterms", Module, Function, ArgsAsString] ->
-            case rpc:call(TargetNode,
-                          list_to_atom(Module),
-                          list_to_atom(Function),
-                          consult(ArgsAsString), 60000) of
-                {badrpc, Reason} ->
-                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
-                Res ->
-                    success("~p", [Res])
+        "stop" ->
+            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            success("~p", [rpc:call(TargetNode, init, stop, [], Timeout)]);
+        "restart" ->
+            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            success("~p", [rpc:call(TargetNode, init, restart, [], Timeout)]);
+        "reboot" ->
+            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            success("~p", [rpc:call(TargetNode, init, reboot, [], Timeout)]);
+        "eval" ->
+            Command = proplists:get_value("command", Args, "") ++ ".",
+            case erl_scan:string(Command) of
+                {ok, Tokens, _} ->
+                    case erl_parse:parse_exprs(Tokens) of
+                        {ok, Parsed} ->
+                            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+                            case rpc:call(TargetNode, erl_eval, exprs, [Parsed, []], Timeout) of
+                                {badrpc, Reason} ->
+                                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
+                                {value, Value, _} ->
+                                    success("~p", [Value])
+                            end;
+                        {error, Reason} ->
+                            Msg = format_parse_error(Reason),
+                            fail(Msg)
+                    end;
+                {error, Reason, _} ->
+                    Msg = format_parse_error(Reason),
+                    fail(Msg)
             end;
         _Other ->
-            fail("Usage: nodetool {chkconfig|getpid|ping|stop|restart|reboot|rpc|rpc_infinity|rpcterms}")
+            fail("Wrong usage")
     end,
     net_kernel:stop().
 
@@ -92,21 +90,25 @@ process_args(Args) ->
     process_args(Args, [], undefined).
 
 process_args([], Acc, TargetNode) ->
-    {lists:reverse(Acc), TargetNode};
-process_args(["-setcookie", Cookie | Rest], Acc, TargetNode) ->
-    erlang:set_cookie(node(), list_to_atom(Cookie)),
-    process_args(Rest, Acc, TargetNode);
-process_args(["-name", TargetName | Rest], Acc, _) ->
-    ThisNode = append_node_suffix(TargetName, "_maint_"),
-    {ok, _} = net_kernel:start([ThisNode, longnames]),
-    process_args(Rest, Acc, nodename(TargetName));
-process_args(["-sname", TargetName | Rest], Acc, _) ->
-    ThisNode = append_node_suffix(TargetName, "_maint_"),
-    {ok, _} = net_kernel:start([ThisNode, shortnames]),
-    process_args(Rest, Acc, nodename(TargetName));
-process_args([Arg | Rest], Acc, Opts) ->
-    process_args(Rest, [Arg | Acc], Opts).
-
+    {Acc, TargetNode};
+process_args([H|T], Acc, TargetNode) ->
+    case string:tokens(H, [$=]) of
+        ["cookie", Cookie] ->
+            erlang:set_cookie(node(), list_to_atom(Cookie)),
+            process_args(T, [{"cookie", Cookie}|Acc], TargetNode);
+        ["name", TargetName] ->
+            ThisNode = append_node_suffix(TargetName, "_maint_"),
+            {ok, _} = net_kernel:start([ThisNode, longnames]),
+            process_args(T, [{"name", TargetName}|Acc], nodename(TargetName));
+        ["sname", TargetName] ->
+            ThisNode = append_node_suffix(TargetName, "_maint_"),
+            {ok, _} = net_kernel:start([ThisNode, shortnames]),
+            process_args(T, [{"name", TargetName}|Acc], nodename(TargetName));
+        [Key, Value] ->
+            process_args(T, [{Key, Value}|Acc], TargetNode);
+        _ ->
+            process_args(T, Acc, TargetNode)
+    end.
 
 start_epmd() ->
     [] = os:cmd(epmd_path() ++ " -daemon"),
@@ -146,31 +148,6 @@ append_node_suffix(Name, Suffix) ->
             list_to_atom(lists:concat([Node, Suffix, os:getpid()]))
     end.
 
-
-%%
-%% Given a string or binary, parse it into a list of terms, ala file:consult/0
-%%
-consult(Str) when is_list(Str) ->
-    consult([], Str, []);
-consult(Bin) when is_binary(Bin)->
-    consult([], binary_to_list(Bin), []).
-
-consult(Cont, Str, Acc) ->
-    case erl_scan:tokens(Cont, Str, 0) of
-        {done, Result, Remaining} ->
-            case Result of
-                {ok, Tokens, _} ->
-                    {ok, Term} = erl_parse:parse_term(Tokens),
-                    consult([], Remaining, [Term | Acc]);
-                {eof, _Other} ->
-                    lists:reverse(Acc);
-                {error, Info, _} ->
-                    {error, Info}
-            end;
-        {more, Cont1} ->
-            consult(Cont1, eof, Acc)
-    end.
-
 success(String) ->
     success(String, []).
 
@@ -186,3 +163,6 @@ fail(String, Args) ->
     Msg = lists:flatten(io_lib:format(String, Args)),
     io:format("{\"failed\" : true, \"msg\": ~p}", [Msg]),
     halt(1).
+
+format_parse_error({_Line, Mod, Err}) ->
+    lists:flatten(Mod:format_error(Err)).
