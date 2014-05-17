@@ -16,16 +16,13 @@ main(Args) ->
         ["chkconfig", File] ->
             case file:consult(File) of
                 {ok, _} ->
-                    io:format("ok\n"),
-                    halt(0);
+                    success("ok");
                 {error, {Line, Mod, Term}} ->
-                    io:format(standard_error, ["Error on line ",
-                              file:format_error({Line, Mod, Term}), "\n"], []),
-                    halt(1);
+                    Error = file:format_error({Line, Mod, Term}),
+                    fail("Error on line ~s", [Error]);
                 {error, R} ->
-                    io:format(standard_error, ["Error reading config file: ",
-                              file:format_error(R), "\n"], []),
-                    halt(1)
+                    Error = file:format_error(R),
+                    fail("Error reading config file: ~s", [Error])
             end;
         _ ->
             ok
@@ -37,52 +34,44 @@ main(Args) ->
         {true, pong} ->
             ok;
         {false,pong} ->
-            io:format("Failed to connect to node ~p .\n", [TargetNode]),
-            halt(1);
+            fail(io_lib:format("Failed to connect to node ~p", [TargetNode]));
         {_, pang} ->
-            io:format("Node ~p not responding to pings.\n", [TargetNode]),
-            halt(1)
+            fail(io_lib:format("Node ~p not responding to pings.", [TargetNode]))
     end,
 
     case RestArgs of
         ["getpid"] ->
-            io:format("~p\n",
+            success("~p",
                       [list_to_integer(rpc:call(TargetNode, os, getpid, []))]);
         ["ping"] ->
             %% If we got this far, the node already responsed to a
             %% ping, so just dump a "pong"
-            io:format("pong\n");
+            success("pong");
         ["stop"] ->
-            io:format("~p\n", [rpc:call(TargetNode, init, stop, [], 60000)]);
+            success("~p", [rpc:call(TargetNode, init, stop, [], 60000)]);
         ["restart"] ->
-            io:format("~p\n", [rpc:call(TargetNode, init, restart, [], 60000)]);
+            success("~p", [rpc:call(TargetNode, init, restart, [], 60000)]);
         ["reboot"] ->
-            io:format("~p\n", [rpc:call(TargetNode, init, reboot, [], 60000)]);
+            success("~p", [rpc:call(TargetNode, init, reboot, [], 60000)]);
         ["rpc", Module, Function | RpcArgs] ->
             case rpc:call(TargetNode,
                           list_to_atom(Module),
                           list_to_atom(Function),
                           [RpcArgs], 60000) of
-                ok ->
-                    ok;
                 {badrpc, Reason} ->
-                    io:format("RPC to ~p failed: ~p\n", [TargetNode, Reason]),
-                    halt(1);
-                _ ->
-                    halt(1)
+                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
+                Res ->
+                    success("~p", [Res])
             end;
         ["rpc_infinity", Module, Function | RpcArgs] ->
             case rpc:call(TargetNode,
                           list_to_atom(Module),
                           list_to_atom(Function),
                           [RpcArgs], infinity) of
-                ok ->
-                    ok;
                 {badrpc, Reason} ->
-                    io:format("RPC to ~p failed: ~p\n", [TargetNode, Reason]),
-                    halt(1);
-                _ ->
-                    halt(1)
+                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
+                Res ->
+                    success("~p", [Res])
             end;
         ["rpcterms", Module, Function, ArgsAsString] ->
             case rpc:call(TargetNode,
@@ -90,14 +79,12 @@ main(Args) ->
                           list_to_atom(Function),
                           consult(ArgsAsString), 60000) of
                 {badrpc, Reason} ->
-                    io:format("RPC to ~p failed: ~p\n", [TargetNode, Reason]),
-                    halt(1);
-                Other ->
-                    io:format("~p\n", [Other])
+                    fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
+                Res ->
+                    success("~p", [Res])
             end;
-        Other ->
-            io:format("Other: ~p\n", [Other]),
-            io:format("Usage: nodetool {chkconfig|getpid|ping|stop|restart|reboot|rpc|rpc_infinity|rpcterms}\n")
+        _Other ->
+            fail("Usage: nodetool {chkconfig|getpid|ping|stop|restart|reboot|rpc|rpc_infinity|rpcterms}")
     end,
     net_kernel:stop().
 
@@ -180,3 +167,19 @@ consult(Cont, Str, Acc) ->
         {more, Cont1} ->
             consult(Cont1, eof, Acc)
     end.
+
+success(String) ->
+    success(String, []).
+
+success(String, Args) ->
+    Msg = lists:flatten(io_lib:format(String, Args)),
+    io:format("{\"error\" : false, \"msg\": ~p}", [Msg]),
+    halt(0).
+
+fail(String) ->
+    fail(String, []).
+
+fail(String, Args) ->
+    Msg = lists:flatten(io_lib:format(String, Args)),
+    io:format("{\"error\" : true, \"msg\": ~p}", [Msg]),
+    halt(1).
