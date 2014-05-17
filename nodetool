@@ -12,12 +12,12 @@ main(Args0) ->
     ok = start_epmd(),
     %% Extract the args
     {Args, TargetNode} = process_args(Args0),
-    Action = proplists:get_value("action", Args),
+    Action = get_arg("action", Args),
 
     %% any commands that don't need a running node
     case Action of
         "chkconfig" ->
-            File = proplists:get_value("file", Args),
+            File = get_arg("file", Args),
             case file:consult(File) of
                 {ok, _} ->
                     success("ok");
@@ -52,21 +52,21 @@ main(Args0) ->
             %% ping, so just dump a "pong"
             success("pong");
         "stop" ->
-            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
             success("~p", [rpc:call(TargetNode, init, stop, [], Timeout)]);
         "restart" ->
-            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
             success("~p", [rpc:call(TargetNode, init, restart, [], Timeout)]);
         "reboot" ->
-            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
             success("~p", [rpc:call(TargetNode, init, reboot, [], Timeout)]);
         "eval" ->
-            Command = proplists:get_value("command", Args, "") ++ ".",
+            Command = get_arg("command", Args, "") ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
                         {ok, Parsed} ->
-                            Timeout = proplists:get_value("rpc_timeout", Args, ?RPC_TIMEOUT),
+                            Timeout = get_arg("rpc_timeout", Args, ?RPC_TIMEOUT),
                             case rpc:call(TargetNode, erl_eval, exprs, [Parsed, []], Timeout) of
                                 {badrpc, Reason} ->
                                     fail("RPC to ~p failed: ~p", [TargetNode, Reason]);
@@ -166,3 +166,9 @@ fail(String, Args) ->
 
 format_parse_error({_Line, Mod, Err}) ->
     lists:flatten(Mod:format_error(Err)).
+
+get_arg(Key, Args) ->
+    get_arg(Key, Args, undefined).
+
+get_arg(Key, Args, Default) ->
+    proplists:get_value(Key, Args, Default).
