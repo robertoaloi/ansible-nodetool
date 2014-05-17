@@ -1,5 +1,9 @@
 #!/usr/bin/env escript
-
+%% -------------------------------------------------------------------
+%% Ansible nodetool module
+%% Copyright (c) 2014 Roberto Aloi
+%% License: MIT
+%% -------------------------------------------------------------------
 %% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
 %% ex: ft=erlang ts=4 sw=4 et
 %% -------------------------------------------------------------------
@@ -9,15 +13,19 @@
 %% module:            nodetool
 %% short_description: A little helper to interact with Erlang nodes
 %% description:       A little helper to interact with Erlang nodes
+%% author:            Roberto Aloi
+%% requirements:      Erlang
 %% options:
 %%   node:
 %%     description: The remote Erlang node
 %%     required:    true
 %%   action:
-%%     description: getpid | ping | stop | restart | reboot | eval
+%%     description: The action to be performed
+%%     choices:     [getpid, ping, stop, restart, reboot, eval]
 %%     required:    true
 %%   nametype:
-%%     description: longnames | shortnames
+%%     description: Nametype to be used
+%%     choices:     [longnames, shortnames]
 %%     required:    false
 %%     default:     shortnames
 %%   cookie:
