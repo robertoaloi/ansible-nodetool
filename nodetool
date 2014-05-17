@@ -9,10 +9,12 @@
 -define(RPC_TIMEOUT, 60 * 1000). %% 1 minute
 
 main(Args0) ->
+
     ok = start_epmd(),
     %% Extract the args
-    {Args, TargetNode} = process_args(Args0),
+    Args = process_args(Args0),
     Action = get_arg("action", Args),
+    Node = get_arg("node", Args),
 
     %% any commands that don't need a running node
     case Action of
@@ -33,37 +35,37 @@ main(Args0) ->
     end,
 
     %% See if the node is currently running  -- if it's not, we'll bail
-    case {net_kernel:hidden_connect_node(TargetNode),
-          net_adm:ping(TargetNode)} of
+    case {net_kernel:hidden_connect_node(Node),
+          net_adm:ping(Node)} of
         {true, pong} ->
             ok;
         {false,pong} ->
-            fail(io_lib:format("Failed to connect to node ~p", [TargetNode]));
+            fail(io_lib:format("Failed to connect to node ~p", [Node]));
         {_, pang} ->
-            fail(io_lib:format("Node ~p not responding to pings.", [TargetNode]))
+            fail(io_lib:format("Node ~p not responding to pings.", [Node]))
     end,
 
     case Action of
         "getpid" ->
             success("~p",
-                      [list_to_integer(rpc:call(TargetNode, os, getpid, []))]);
+                      [list_to_integer(rpc:call(Node, os, getpid, []))]);
         "ping" ->
             %% If we got this far, the node already responsed to a
             %% ping, so just dump a "pong"
             success("pong");
         "stop" ->
-            rpc(TargetNode, init, stop, [], Args);
+            rpc(Node, init, stop, [], Args);
         "restart" ->
-            rpc(TargetNode, init, restart, [], Args);
+            rpc(Node, init, restart, [], Args);
         "reboot" ->
-            rpc(TargetNode, init, reboot, [], Args);
+            rpc(Node, init, reboot, [], Args);
         "eval" ->
             Command = get_arg("command", Args, "") ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
                         {ok, Exprs} ->
-                            rpc(TargetNode, erl_eval, exprs, [Exprs, []], Args);
+                            rpc(Node, erl_eval, exprs, [Exprs, []], Args);
                         {error, Reason} ->
                             Msg = format_parse_error(Reason),
                             fail(Msg)
@@ -78,27 +80,29 @@ main(Args0) ->
     net_kernel:stop().
 
 process_args(Args) ->
-    process_args(Args, [], undefined).
+    process_args(Args, []).
 
-process_args([], Acc, TargetNode) ->
-    {Acc, TargetNode};
-process_args([H|T], Acc, TargetNode) ->
+process_args([], Acc) ->
+    Acc; %% No need to reverse
+process_args([H|T], Acc) ->
     case string:tokens(H, [$=]) of
         ["cookie", Cookie] ->
             erlang:set_cookie(node(), list_to_atom(Cookie)),
-            process_args(T, [{"cookie", Cookie}|Acc], TargetNode);
+            process_args(T, [{"cookie", Cookie}|Acc]);
         ["name", TargetName] ->
             ThisNode = append_node_suffix(TargetName, "_maint_"),
             {ok, _} = net_kernel:start([ThisNode, longnames]),
-            process_args(T, [{"name", TargetName}|Acc], nodename(TargetName));
+            TargetNode = nodename(TargetName),
+            process_args(T, [{"name", TargetName},{"node", TargetNode}|Acc]);
         ["sname", TargetName] ->
             ThisNode = append_node_suffix(TargetName, "_maint_"),
             {ok, _} = net_kernel:start([ThisNode, shortnames]),
-            process_args(T, [{"name", TargetName}|Acc], nodename(TargetName));
+            TargetNode = nodename(TargetName),
+            process_args(T, [{"name", TargetName},{"node", TargetNode}|Acc]);
         [Key, Value] ->
-            process_args(T, [{Key, Value}|Acc], TargetNode);
+            process_args(T, [{Key, Value}|Acc]);
         _ ->
-            process_args(T, Acc, TargetNode)
+            process_args(T, Acc)
     end.
 
 start_epmd() ->
@@ -120,7 +124,6 @@ epmd_path() ->
         Epmd ->
             Epmd
     end.
-
 
 nodename(Name) ->
     case string:tokens(Name, "@") of
