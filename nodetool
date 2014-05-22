@@ -52,6 +52,13 @@ main([ConfigFile]) ->
 
     ok = start_distribution(ThisNode, NameType),
 
+    case get_arg("cookie", Args) of
+        undefined ->
+            ok;
+        Cookie    ->
+            erlang:set_cookie(node(), list_to_atom(Cookie))
+    end,
+
     TargetNode = nodename(Node),
 
     case Action of
@@ -108,9 +115,6 @@ parse_args([], Acc) ->
     Acc; %% No need to reverse
 parse_args([H|T], Acc) ->
     case re:split(H, "=") of
-        [<<"cookie">>, Cookie] ->
-            erlang:set_cookie(node(), list_to_atom(Cookie)),
-            parse_args(T, [{"cookie", Cookie}|Acc]);
         [Key, Value] ->
             parse_args(T, [{binary_to_list(Key), binary_to_list(Value)}|Acc]);
         _ ->
