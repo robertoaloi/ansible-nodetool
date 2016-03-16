@@ -115,7 +115,7 @@ parse_args(ConfigFile) ->
 parse_args([], Acc) ->
     Acc; %% No need to reverse
 parse_args([H|T], Acc) ->
-    case re:split(H, "=") of
+    case binary:split(H, <<"=">>) of
         [Key, Value] ->
             parse_args(T, [{binary_to_list(Key), binary_to_list(Value)}|Acc]);
         _ ->
