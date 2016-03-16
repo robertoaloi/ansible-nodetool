@@ -81,7 +81,8 @@ main([ConfigFile]) ->
         "reboot" ->
             rpc(init, reboot, [], Args);
         "eval" ->
-            Command = get_arg("command", Args, "") ++ ".",
+            Command0 = get_arg("command", Args, ""),
+            Command  = string:strip(Command0, both, $') ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
