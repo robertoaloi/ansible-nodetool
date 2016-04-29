@@ -196,7 +196,13 @@ rpc(Mod, Fun, Args, Opts) ->
 
 rpc(Mod, Fun, Args, Opts, Callback) ->
     Node    = nodename(strip(get_arg("node", Opts))),
-    Timeout = get_arg("timeout", Opts, ?RPC_TIMEOUT),
+    Timeout = case get_arg("timeout", Opts) of
+                undefined -> ?RPC_TIMEOUT;
+                V         ->
+                  Striped = strip(V),
+                  {N, _} = string:to_integer(Striped),
+                  N
+              end,
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
         {badrpc, Reason} ->
             fail("RPC to ~p failed: ~p", [Node, Reason]);
