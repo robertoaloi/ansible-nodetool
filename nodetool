@@ -199,8 +199,8 @@ rpc(Mod, Fun, Args, Opts, Callback) ->
     Timeout = case get_arg("timeout", Opts) of
                 undefined -> ?RPC_TIMEOUT;
                 V         ->
-                  Striped = strip(V),
-                  {N, _} = string:to_integer(Striped),
+                  Stripped = strip(V),
+                  {N, _} = string:to_integer(Stripped),
                   N
               end,
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
