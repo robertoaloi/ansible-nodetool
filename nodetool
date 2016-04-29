@@ -44,8 +44,8 @@ main([ConfigFile]) ->
     %% Extract the args
     Args = parse_args(ConfigFile),
 
-    Action   = get_arg("action",   Args),
-    Node     = get_arg("node",     Args),
+    Action   = strip(get_arg("action",   Args)),
+    Node     = strip(get_arg("node",     Args)),
     NameType = get_arg("nametype", Args, shortnames),
 
     ThisNode   = append_node_suffix(Node, "_maint_"),
@@ -56,7 +56,7 @@ main([ConfigFile]) ->
         undefined ->
             ok;
         Cookie    ->
-            erlang:set_cookie(node(), list_to_atom(Cookie))
+            erlang:set_cookie(node(), list_to_atom(strip_dq(Cookie)))
     end,
 
     TargetNode = nodename(Node),
@@ -82,7 +82,7 @@ main([ConfigFile]) ->
             rpc(init, reboot, [], Args);
         "eval" ->
             Command0 = get_arg("command", Args, ""),
-            Command  = string:strip(Command0, both, $') ++ ".",
+            Command  = strip(Command0) ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
@@ -195,7 +195,7 @@ rpc(Mod, Fun, Args, Opts) ->
     rpc(Mod, Fun, Args, Opts, fun(X) -> success("~p", [X]) end).
 
 rpc(Mod, Fun, Args, Opts, Callback) ->
-    Node    = nodename(get_arg("node", Opts)),
+    Node    = nodename(strip(get_arg("node", Opts))),
     Timeout = get_arg("timeout", Opts, ?RPC_TIMEOUT),
     case rpc:call(Node, Mod, Fun, Args, Timeout) of
         {badrpc, Reason} ->
@@ -203,3 +203,12 @@ rpc(Mod, Fun, Args, Opts, Callback) ->
         Result ->
             Callback(Result)
     end.
+
+strip(A) ->
+  strip_sq(strip_dq(A)).
+
+strip_sq(A) ->
+  string:strip(A, both, $').
+
+strip_dq(A) ->
+  string:strip(A, both, $").
