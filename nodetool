@@ -234,16 +234,17 @@ strip_dq(A) ->
   string:strip(A, both, $").
 
 simple_group_leader() ->
-    simple_group_leader([]).
+    simple_group_leader(<<>>).
 
 simple_group_leader(Acc) ->
     receive
         {flush_request, From} ->
-            From ! {flush_response, lists:reverse(Acc)};
-        {io_request, From, ReplyAs, {put_chars, unicode, M, F, A}} ->
-            From ! {io_reply, ReplyAs, ok},
+            From ! {flush_response, binary_to_list(Acc)};
+        {io_request, From, ReplyAs, {put_chars, Encoding, M, F, A}} ->
             String = erlang:apply(M, F, A),
-            simple_group_leader([String|Acc]);
+            Binary = unicode:characters_to_binary(String, Encoding),
+            From ! {io_reply, ReplyAs, ok},
+            simple_group_leader(<<Acc/binary, Binary/binary>>);
         Other ->
             fail("Unexpected I/O message: ~p", [Other])
     end.
