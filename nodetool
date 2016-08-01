@@ -234,21 +234,21 @@ strip_dq(A) ->
   string:strip(A, both, $").
 
 simple_group_leader() ->
-    simple_group_leader(<<>>).
+    simple_group_leader([]).
 
 simple_group_leader(Acc) ->
     receive
         {flush_request, From} ->
-            From ! {flush_response, binary_to_list(Acc)};
+            From ! {flush_response, lists:reverse(Acc)};
         {io_request, From, ReplyAs, {put_chars, Encoding, Characters}} ->
-            Binary = unicode:characters_to_binary(Characters, Encoding),
+            List = unicode:characters_to_list(Characters, Encoding),
             From ! {io_reply, ReplyAs, ok},
-            simple_group_leader(<<Acc/binary, Binary/binary>>);
+            simple_group_leader([List|Acc]);
         {io_request, From, ReplyAs, {put_chars, Encoding, M, F, A}} ->
             String = erlang:apply(M, F, A),
-            Binary = unicode:characters_to_binary(String, Encoding),
+            List = unicode:characters_to_list(String, Encoding),
             From ! {io_reply, ReplyAs, ok},
-            simple_group_leader(<<Acc/binary, Binary/binary>>);
+            simple_group_leader([List|Acc]);
         {io_request, From, ReplyAs, Request} ->
             From ! {io_reply, ReplyAs, {error, request}},
             fail("Unimplemented request type: ~p", [Request]);
