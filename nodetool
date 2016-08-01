@@ -64,7 +64,7 @@ main([ConfigFile]) ->
 
     case Action of
         "getpid" ->
-            rpc(os, getpid, [], Args, fun(X) -> list_to_integer(X) end);
+            rpc(os, getpid, [], Args, fun erlang:list_to_integer/1);
         "ping" ->
             case net_adm:ping(TargetNode) of
                 pong ->
@@ -205,15 +205,15 @@ rpc(Mod, Fun, Args, Opts, Callback) ->
                   {N, _} = string:to_integer(Stripped),
                   N
               end,
-    case rpc_call(Node, Mod, Fun, Args, Timeout) of
+    case rpc_capture_output(Node, Mod, Fun, Args, Timeout) of
         {{badrpc, Reason}, IO} ->
             fail("RPC to ~p failed: ~p", [Node, Reason], IO);
         {Result, IO} ->
             success("~p", [Callback(Result)], IO)
     end.
 
-rpc_call(Node, Mod, Fun, Args, Timeout) ->
-    P  = spawn(fun simple_group_leader/0),
+rpc_capture_output(Node, Mod, Fun, Args, Timeout) ->
+    P  = spawn_link(fun simple_group_leader/0),
     GL = group_leader(),
     group_leader(P, self()),
     Result = rpc:call(Node, Mod, Fun, Args, Timeout),
@@ -239,7 +239,7 @@ simple_group_leader() ->
 simple_group_leader(Acc) ->
     receive
         {flush_request, From} ->
-            From ! {flush_response, lists:flatten(lists:reverse(Acc))};
+            From ! {flush_response, lists:reverse(Acc)};
         {io_request, From, ReplyAs, {put_chars, unicode, M, F, A}} ->
             From ! {io_reply, ReplyAs, ok},
             String = erlang:apply(M, F, A),
