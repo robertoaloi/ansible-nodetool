@@ -240,11 +240,18 @@ simple_group_leader(Acc) ->
     receive
         {flush_request, From} ->
             From ! {flush_response, binary_to_list(Acc)};
+        {io_request, From, ReplyAs, {put_chars, Encoding, Characters}} ->
+            Binary = unicode:characters_to_binary(Characters, Encoding),
+            From ! {io_reply, ReplyAs, ok},
+            simple_group_leader(<<Acc/binary, Binary/binary>>);
         {io_request, From, ReplyAs, {put_chars, Encoding, M, F, A}} ->
             String = erlang:apply(M, F, A),
             Binary = unicode:characters_to_binary(String, Encoding),
             From ! {io_reply, ReplyAs, ok},
             simple_group_leader(<<Acc/binary, Binary/binary>>);
+        {io_request, From, ReplyAs, Request} ->
+            From ! {io_reply, ReplyAs, {error, request}},
+            fail("Unimplemented request type: ~p", [Request]);
         Other ->
             fail("Unexpected I/O message: ~p", [Other])
     end.
