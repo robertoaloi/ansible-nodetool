@@ -239,7 +239,7 @@ simple_group_leader() ->
 simple_group_leader(Acc) ->
     receive
         {flush_request, From} ->
-            From ! {flush_response, lists:reverse(Acc)};
+            From ! {flush_response, lists:flatten(lists:reverse(Acc))};
         {io_request, From, ReplyAs, {put_chars, Encoding, Characters}} ->
             List = unicode:characters_to_list(Characters, Encoding),
             From ! {io_reply, ReplyAs, ok},
