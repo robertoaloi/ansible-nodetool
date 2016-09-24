@@ -1,7 +1,7 @@
 #!/usr/bin/env escript
 %% -------------------------------------------------------------------
 %% Ansible nodetool module
-%% Copyright (c) 2014 Roberto Aloi
+%% Copyright (c) 2016 Roberto Aloi, Claes Wikstrom
 %% License: MIT
 %% -------------------------------------------------------------------
 %% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
