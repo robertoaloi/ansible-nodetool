@@ -29,3 +29,12 @@ An Ansible module to interact with Erlang nodes.
 The work is based on the `nodetool` script from the Yaws project:
 
 https://github.com/klacke/yaws
+
+## Contributors
+
+A big thanks to:
+
+- Amir Moulavi
+- Fabricio Leotti
+
+For their precious contributions.
