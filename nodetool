@@ -1,4 +1,5 @@
 #!/usr/bin/env escript
+-mode(compile).
 %% -------------------------------------------------------------------
 %% Ansible nodetool module
 %% Copyright (c) 2016 Roberto Aloi, Claes Wikstrom
@@ -44,8 +45,8 @@ main([ConfigFile]) ->
     %% Extract the args
     Args = parse_args(ConfigFile),
 
-    Action   = get_arg("action",   Args),
-    Node     = get_arg("node",     Args),
+    Action   = strip(get_arg("action",   Args)),
+    Node     = strip(get_arg("node",     Args)),
     NameType = get_arg("nametype", Args, shortnames),
 
     ThisNode   = append_node_suffix(Node, "_maint_"),
@@ -56,17 +57,14 @@ main([ConfigFile]) ->
         undefined ->
             ok;
         Cookie    ->
-            erlang:set_cookie(node(), list_to_atom(Cookie))
+            erlang:set_cookie(node(), list_to_atom(strip_dq(Cookie)))
     end,
 
     TargetNode = nodename(Node),
 
     case Action of
         "getpid" ->
-            Cb = fun(Pid) ->
-                         success("~p", [list_to_integer(Pid)])
-                 end,
-            rpc(os, getpid, [], Args, Cb);
+            rpc(os, getpid, [], Args, fun erlang:list_to_integer/1);
         "ping" ->
             case net_adm:ping(TargetNode) of
                 pong ->
@@ -81,15 +79,14 @@ main([ConfigFile]) ->
         "reboot" ->
             rpc(init, reboot, [], Args);
         "eval" ->
-            Command = get_arg("command", Args, "") ++ ".",
+            Command0 = get_arg("command", Args, ""),
+            Command  = strip(Command0) ++ ".",
             case erl_scan:string(Command) of
                 {ok, Tokens, _} ->
                     case erl_parse:parse_exprs(Tokens) of
                         {ok, Exprs} ->
-                            Cb = fun({value, Value, _}) ->
-                                         success("~p", [Value])
-                                 end,
-                            rpc(erl_eval, exprs, [Exprs, []], Args, Cb);
+                            Callback = fun({value, Value, _}) -> Value end,
+                            rpc(erl_eval, exprs, [Exprs, []], Args, Callback);
                         {error, Reason} ->
                             Msg = format_parse_error(Reason),
                             fail(Msg)
@@ -114,7 +111,7 @@ parse_args(ConfigFile) ->
 parse_args([], Acc) ->
     Acc; %% No need to reverse
 parse_args([H|T], Acc) ->
-    case re:split(H, "=") of
+    case binary:split(H, <<"=">>) of
         [Key, Value] ->
             parse_args(T, [{binary_to_list(Key), binary_to_list(Value)}|Acc]);
         _ ->
@@ -158,25 +155,33 @@ nodename(Name) ->
 append_node_suffix(Name, Suffix) ->
     case string:tokens(Name, "@") of
         [Node, Host] ->
-            list_to_atom(lists:concat([Node, Suffix, os:getpid(), "@", Host]));
+            String = lists:concat([Node, Suffix, os:getpid(), "@", Host]),
+            list_to_atom(string:strip(String, both, $'));
         [Node] ->
-            list_to_atom(lists:concat([Node, Suffix, os:getpid()]))
+            String = lists:concat([Node, Suffix, os:getpid()]),
+            list_to_atom(string:strip(String, both, $'))
     end.
 
 success(String) ->
     success(String, []).
 
 success(String, Args) ->
+    success(String, Args, "").
+
+success(String, Args, StdOut) ->
     Msg = lists:flatten(io_lib:format(String, Args)),
-    io:format("{\"changed\": true, \"msg\": ~p}", [Msg]),
+    io:format("{\"changed\": true, \"remote_output\": ~p, \"stdout\": ~p, \"rc\": 0}", [StdOut, Msg]),
     halt(0).
 
 fail(String) ->
     fail(String, []).
 
 fail(String, Args) ->
+    fail(String, Args, "").
+
+fail(String, Args, StdOut) ->
     Msg = lists:flatten(io_lib:format(String, Args)),
-    io:format("{\"failed\" : true, \"msg\": ~p}", [Msg]),
+    io:format("{\"failed\" : true, \"remote_output\": ~p, \"stdout\": ~p, \"rc\": 1}", [StdOut, Msg]),
     halt(1).
 
 format_parse_error({_Line, Mod, Err}) ->
@@ -189,14 +194,64 @@ get_arg(Key, Args, Default) ->
     proplists:get_value(Key, Args, Default).
 
 rpc(Mod, Fun, Args, Opts) ->
-    rpc(Mod, Fun, Args, Opts, fun(X) -> success("~p", [X]) end).
+    rpc(Mod, Fun, Args, Opts, fun(X) -> X end).
 
 rpc(Mod, Fun, Args, Opts, Callback) ->
-    Node    = nodename(get_arg("node", Opts)),
-    Timeout = get_arg("timeout", Opts, ?RPC_TIMEOUT),
-    case rpc:call(Node, Mod, Fun, Args, Timeout) of
-        {badrpc, Reason} ->
-            fail("RPC to ~p failed: ~p", [Node, Reason]);
-        Result ->
-            Callback(Result)
+    Node    = nodename(strip(get_arg("node", Opts))),
+    Timeout = case get_arg("timeout", Opts) of
+                undefined -> ?RPC_TIMEOUT;
+                V         ->
+                  Stripped = strip(V),
+                  {N, _} = string:to_integer(Stripped),
+                  N
+              end,
+    case rpc_capture_output(Node, Mod, Fun, Args, Timeout) of
+        {{badrpc, Reason}, IO} ->
+            fail("RPC to ~p failed: ~p", [Node, Reason], IO);
+        {Result, IO} ->
+            success("~p", [Callback(Result)], IO)
+    end.
+
+rpc_capture_output(Node, Mod, Fun, Args, Timeout) ->
+    P  = spawn_link(fun simple_group_leader/0),
+    GL = group_leader(),
+    group_leader(P, self()),
+    Result = rpc:call(Node, Mod, Fun, Args, Timeout),
+    group_leader(GL, self()),
+    P ! {flush_request, self()},
+    receive
+        {flush_response, IO} -> IO
+    end,
+    {Result, IO}.
+
+strip(A) ->
+  strip_sq(strip_dq(A)).
+
+strip_sq(A) ->
+  string:strip(A, both, $').
+
+strip_dq(A) ->
+  string:strip(A, both, $").
+
+simple_group_leader() ->
+    simple_group_leader([]).
+
+simple_group_leader(Acc) ->
+    receive
+        {flush_request, From} ->
+            From ! {flush_response, lists:flatten(lists:reverse(Acc))};
+        {io_request, From, ReplyAs, {put_chars, Encoding, Characters}} ->
+            List = unicode:characters_to_list(Characters, Encoding),
+            From ! {io_reply, ReplyAs, ok},
+            simple_group_leader([List|Acc]);
+        {io_request, From, ReplyAs, {put_chars, Encoding, M, F, A}} ->
+            String = erlang:apply(M, F, A),
+            List = unicode:characters_to_list(String, Encoding),
+            From ! {io_reply, ReplyAs, ok},
+            simple_group_leader([List|Acc]);
+        {io_request, From, ReplyAs, Request} ->
+            From ! {io_reply, ReplyAs, {error, request}},
+            fail("Unimplemented request type: ~p", [Request]);
+        Other ->
+            fail("Unexpected I/O message: ~p", [Other])
     end.
