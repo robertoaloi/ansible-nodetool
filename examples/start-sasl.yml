@@ -1,0 +1,10 @@
+---
+
+- hosts: localhost
+  tasks:
+  - name: "Ensure the SASL application is started"
+    nodetool:
+      action:  eval
+      command: ok=application:ensure_started(sasl)
+      cookie:  secret
+      node:    alice@{{ inventory_hostname_short }}

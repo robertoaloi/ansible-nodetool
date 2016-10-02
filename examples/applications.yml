@@ -1,0 +1,13 @@
+---
+
+- hosts: localhost
+  tasks:
+  - name: "Return a list of running applications"
+    nodetool:
+      action:  eval
+      command: application:which_applications()
+      cookie:  secret
+      node:    alice@{{ inventory_hostname_short }}
+    register: applications
+  - debug:
+      msg: "{{ applications.stdout_lines }}"
