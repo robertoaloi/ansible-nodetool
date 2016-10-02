@@ -1,0 +1,9 @@
+---
+
+- hosts: localhost
+  tasks:
+  - name: "Ping the 'alice' Erlang node"
+    nodetool:
+      action: ping
+      cookie: secret
+      node:   alice@{{ inventory_hostname_short }}

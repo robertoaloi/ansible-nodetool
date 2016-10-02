@@ -1,0 +1,12 @@
+---
+
+- hosts: localhost
+  tasks:
+  - name: "Return the process identifier of the current Erlang emulator"
+    nodetool:
+      action: getpid
+      cookie: secret
+      node:   alice@{{ inventory_hostname_short }}
+    register: pid
+  - debug:
+      msg: "{{ pid.stdout }}"

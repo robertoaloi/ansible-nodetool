@@ -1,0 +1,10 @@
+---
+
+- hosts: localhost
+  tasks:
+  - name: "Ensure that the reverse of 'foo' is 'oof'"
+    nodetool:
+      action:  eval
+      command: "\"oof\"=lists:reverse(\"foo\")"
+      cookie:  secret
+      node:    alice@{{ inventory_hostname_short }}
