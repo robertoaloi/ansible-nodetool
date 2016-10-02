@@ -7,7 +7,7 @@ An Ansible module to interact with Erlang nodes via Erlang RPC.
 If your architecture includes one or more Erlang nodes and you use
 Ansible to orchestrate them, you may find this Ansible module helpful.
 
-## Mininmum Requirements
+## Minimum Requirements
 
 - Ansible 2.0.0.2
 - Erlang/OTP 17.0
@@ -16,32 +16,33 @@ Ansible to orchestrate them, you may find this Ansible module helpful.
 
 Clone the ansible-nodetool repository:
 
-git clone https://github.com/robertoaloi/ansible-nodetool.git /path/to/ansible-nodetool
+    git clone https://github.com/robertoaloi/ansible-nodetool.git /path/to/ansible-nodetool
 
 Then, you need to tell Ansible where to find the new module.
 You can do this by
 appending the repository path to the `library` value in your
 `~/.ansible.cfg` file. You can find the `library` value under the
 `defaults` group. If you do not have a `defaults` group in your
-`~/.ansible.cfg` file (or if you do not have a `~/.ansible.cfg` file)
+`~/.ansible.cfg` file (or if you do not have a `~/.ansible.cfg` file
+at all)
 add one. You can find more information about configuring Ansible
 [here](http://docs.ansible.com/ansible/intro_configuration.html).
 
     [defaults]
-    library = /path/to/ansible-nodetool
+    library = CURRENT_PATH:/path/to/ansible-nodetool
 
 Alternatively, you can specify the `-M` option when invoking a
 playbook. Example:
 
-    ansible-playbook -M /path/to/ansible-nodetool my_playbook.yml
+    $ ansible-playbook -M /path/to/ansible-nodetool my_playbook.yml
 
 Or when running an [ad-hoc
 command](http://docs.ansible.com/ansible/intro_adhoc.html). Example:
 
-    ansible -m nodetool \
-            -M /path/to/ansible-nodetool \
-            -a 'node=alice@localhost cookie=secret action=ping' \
-            localhost
+    $ ansible -m nodetool \
+             -M /path/to/ansible-nodetool \
+             -a 'node=alice@localhost cookie=secret action=ping' \
+             localhost
 
 ## Parameters
 
@@ -73,7 +74,7 @@ playbook.
 To try things out, start a sample Erlang node named
 'alice' and with a 'secret' cookie:
 
-    erl -sname alice@localhost -setcookie secret
+    $ erl -sname alice@localhost -setcookie secret
 
 You can now ping the node using the following playbook:
 
@@ -89,7 +90,7 @@ You can now ping the node using the following playbook:
 
 Example:
 
-    ansible-playbook ping.yml
+    $ ansible-playbook ping.yml
 
     PLAY
     ***************************************************************************
@@ -109,7 +110,7 @@ Example:
 
 But the ansible-nodetool module is not only about pinging nodes.
 You can also evaluate custom Erlang expressions on a remote Erlang
-node using the 'eval' action.
+node using the `eval` action.
 
 The following playbook gets the list of running applications in an
 Erlang node, registers the result into an Ansible variable and prints
@@ -210,15 +211,17 @@ Example:
           cookie:  secret
           node:    alice@{{ inventory_hostname_short }}
 
+Notice the usage of the pattern matching operator (=) above and the
+presence of backslashes to escape the double quotes.
+
 ## Idempotence
 
 Idempotence is a crucial principle in Ansible. Given the nature of the
 Ansible nodetool module, which allow the operator to perform custom
-Erlang expressions via the `eval` action, it is left to the user,
-which should try not to violate it as much as possible.
+Erlang expressions via the `eval` action, idempotence **cannot** be
+guaranteed by the module. It is up to the user to avoid violating it.
 
-As an example, to start an Erlang application, the following playbook
-would *not* be idempotent:
+Let's consider the following example:
 
     ---
 
@@ -233,7 +236,9 @@ would *not* be idempotent:
           cookie:  secret
           node:    alice@{{ inventory_hostname_short }}
 
-The following is a much better implementation:
+The above playbook expects the `application:start/1` function to
+return `ok`. This will only happen if the application is not already started.
+The following is a much better approach:
 
     ---
 
@@ -246,9 +251,12 @@ The following is a much better implementation:
           cookie:  secret
           node:    alice@{{ inventory_hostname_short }}
 
+The `application:ensure_started/1` function will only start the
+application if it is not already started. Much better!
+
 ## Credits
 
-The work is based on the `nodetool` script from the Yaws project:
+The work is based on the `nodetool` escript from the Yaws project:
 
 https://github.com/klacke/yaws
 
