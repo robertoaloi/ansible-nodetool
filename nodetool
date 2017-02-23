@@ -48,7 +48,7 @@ main([ConfigFile]) ->
     Action   = strip(get_arg("action",   Args)),
     Node     = strip(get_arg("node",     Args)),
     NameTypeStr = get_arg("nametype", Args, "shortnames"),
-	NameType = list_to_atom(string:strip(NameTypeStr, both, $')),
+    NameType = list_to_atom(string:strip(NameTypeStr, both, $')),
 
     ThisNode   = append_node_suffix(Node, "_maint_"),
 
