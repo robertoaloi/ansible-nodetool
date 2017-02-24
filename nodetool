@@ -1,4 +1,6 @@
 #!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -hidden
 -mode(compile).
 %% -------------------------------------------------------------------
 %% Ansible nodetool module
