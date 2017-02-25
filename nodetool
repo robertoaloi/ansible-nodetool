@@ -49,7 +49,7 @@ main([ConfigFile]) ->
 
     Action   = strip(get_arg("action",   Args)),
     Node     = strip(get_arg("node",     Args)),
-    NameType = get_arg("nametype", Args, shortnames),
+    NameType = list_to_existing_atom(get_arg("nametype", Args, "shortnames")),
 
     ThisNode   = append_node_suffix(Node, "_maint_"),
 
