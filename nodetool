@@ -49,7 +49,7 @@ main([ConfigFile]) ->
 
     Action   = strip(get_arg("action",   Args)),
     Node     = strip(get_arg("node",     Args)),
-    NameType = get_arg("nametype", Args, shortnames),
+    NameType = list_to_atom2(get_arg("nametype", Args, "shortnames")),
 
     ThisNode   = append_node_suffix(Node, "_maint_"),
 
@@ -256,4 +256,13 @@ simple_group_leader(Acc) ->
             fail("Unimplemented request type: ~p", [Request]);
         Other ->
             fail("Unexpected I/O message: ~p", [Other])
+    end.
+
+list_to_atom2(String) ->
+    try list_to_existing_atom(String) of
+        Atom ->
+            Atom
+    catch
+        _:_ ->
+            list_to_atom(String)
     end.
