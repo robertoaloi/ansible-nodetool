@@ -63,6 +63,8 @@ main([ConfigFile]) ->
     end,
 
     TargetNode = nodename(Node),
+	%% hidden connect target node
+	net_kernel:hidden_connect_node(TargetNode),
 
     case Action of
         "getpid" ->
@@ -122,7 +124,7 @@ parse_args([H|T], Acc) ->
 
 start_distribution(Name, NameType) ->
     ok = start_epmd(),
-    application:set_env(net_kernel, dist_auto_connect, false), %% Hidden node
+    application:set_env(kernel, dist_auto_connect, never), %% Hidden node
     {ok, _} = net_kernel:start([Name, NameType]),
     ok.
 
